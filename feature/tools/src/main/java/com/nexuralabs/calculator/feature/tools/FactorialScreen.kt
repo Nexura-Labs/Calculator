@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -35,18 +36,12 @@ fun FactorialScreen(navController: NavController) {
     var input by remember { mutableStateOf("") }
     var fullResult by remember { mutableStateOf("") }
     var scientificResult by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
     var isCalculating by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
 
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
-
-    val displayChunks = remember(fullResult) {
-        if (fullResult.isEmpty()) emptyList()
-        else if (fullResult.length > 2000) fullResult.chunked(1000)
-        else listOf(fullResult)
-    }
 
     Scaffold(
         topBar = {
@@ -54,7 +49,7 @@ fun FactorialScreen(navController: NavController) {
                 title = { Text("Factorial Calculator") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 }
             )
@@ -74,60 +69,50 @@ fun FactorialScreen(navController: NavController) {
                 onValueChange = { newValue ->
                     if (newValue.isEmpty() || (newValue.all { it.isDigit() } && newValue.length <= 7)) {
                         input = newValue
-                        errorMessage = null
+                        errorMessage = ""
                     }
                 },
-                label = { Text("Enter a number") },
-                supportingText = {
-                    if (errorMessage != null) {
-                        Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
-                    } else {
-                        Text("Max 100,000")
-                    }
-                },
-                isError = errorMessage != null,
+                label = { Text("Enter a number (Max 100,000)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                singleLine = true
+                singleLine = true,
+                isError = errorMessage.isNotEmpty(),
+                supportingText = if (errorMessage.isNotEmpty()) {
+                    { Text(errorMessage, color = MaterialTheme.colorScheme.error) }
+                } else null
             )
 
             Spacer(Modifier.height(16.dp))
 
             Button(
                 onClick = {
-                    keyboardController?.hide()
-                    val n = input.toIntOrNull()
-
                     when {
-                        input.isEmpty() -> {
-                            errorMessage = "Input cannot be empty"
-                            return@Button
-                        }
-                        n == null || n < 0 -> {
-                            errorMessage = "Enter a valid positive number"
-                            return@Button
-                        }
-                        n > 100000 -> {
-                            errorMessage = "Number too large! Max is 100,000"
-                            return@Button
-                        }
-                    }
-
-                    errorMessage = null
-                    fullResult = ""
-                    scientificResult = ""
-                    isCalculating = true
-
-                    scope.launch {
-                        try {
-                            val res = calculateFactorialFast(n)
-                            fullResult = res
-                            scientificResult = formatScientific(res)
-                        } catch (e: Exception) {
-                            errorMessage = e.localizedMessage ?: "Calculation failed"
-                        } finally {
-                            isCalculating = false
+                        input.isEmpty() -> errorMessage = "Enter a positive number"
+                        input.toIntOrNull() == null -> errorMessage = "Invalid input"
+                        input.toInt() < 0 -> errorMessage = "Number must be non-negative"
+                        input.toInt() > 100000 -> errorMessage = "Number exceeds limit (max 100,000)"
+                        else -> {
+                            val n = input.toInt()
+                            keyboardController?.hide()
+                            isCalculating = true
+                            errorMessage = ""
+                            fullResult = ""
+                            scientificResult = ""
+                            
+                            scope.launch {
+                                try {
+                                    val result = calculateFactorialFast(n)
+                                    fullResult = result
+                                    scientificResult = formatScientific(result)
+                                } catch (e: Exception) {
+                                    errorMessage = "Calculation error: ${e.message}"
+                                    fullResult = ""
+                                    scientificResult = ""
+                                } finally {
+                                    isCalculating = false
+                                }
+                            }
                         }
                     }
                 },
@@ -138,7 +123,10 @@ fun FactorialScreen(navController: NavController) {
                 enabled = !isCalculating
             ) {
                 if (isCalculating) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                 } else {
                     Text("Calculate (!)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
@@ -169,10 +157,9 @@ fun FactorialScreen(navController: NavController) {
                             Text(
                                 "Result",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
+                                fontWeight = FontWeight.Bold
                             )
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(12.dp))
                             IconButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -184,7 +171,7 @@ fun FactorialScreen(navController: NavController) {
                             ) {
                                 Icon(
                                     Icons.Default.ContentCopy,
-                                    contentDescription = "Copy",
+                                    "Copy",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -198,9 +185,9 @@ fun FactorialScreen(navController: NavController) {
 
                         if (scientificResult.isNotEmpty()) {
                             Text(
-                                text = "Approx: $scientificResult",
+                                text = scientificResult,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
+                                fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.secondary,
                                 textAlign = TextAlign.Center
                             )
@@ -208,29 +195,31 @@ fun FactorialScreen(navController: NavController) {
                         }
 
                         val fontSize = when {
-                            fullResult.length <= 10 -> 36.sp
-                            fullResult.length <= 16 -> 26.sp
-                            fullResult.length <= 22 -> 20.sp
-                            fullResult.length <= 100 -> 16.sp
-                            else -> 12.sp
+                            fullResult.length <= 10 -> 32.sp
+                            fullResult.length <= 16 -> 24.sp
+                            fullResult.length <= 50 -> 18.sp
+                            fullResult.length <= 500 -> 13.sp
+                            else -> 11.sp
                         }
 
-                        LazyColumn(
+                        SelectionContainer(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
                         ) {
-                            items(displayChunks) { chunk ->
-                                Text(
-                                    text = chunk,
-                                    fontSize = fontSize,
-                                    lineHeight = (fontSize.value * 1.4).sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                            Text(
+                                text = fullResult,
+                                fontSize = fontSize,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp),
+                                textAlign = TextAlign.Center,
+                                lineHeight = (fontSize.value * 1.25).sp,
+                                fontFamily = FontFamily.Monospace,
+                                softWrap = true
+                            )
                         }
                     }
                 }
@@ -241,11 +230,10 @@ fun FactorialScreen(navController: NavController) {
 
 private fun formatScientific(result: String): String {
     return if (result.length > 20) {
-        val mantissaPart = result.substring(1, minOf(4, result.length))
-        "≈ ${result[0]}.$mantissaPart e+${result.length - 1}"
-    } else {
-        ""
-    }
+        val exponent = result.length - 1
+        val mantissa = "${result[0]}.${result.substring(1, minOf(4, result.length))}"
+        "≈ $mantissa × 10^$exponent"
+    } else ""
 }
 
 suspend fun calculateFactorialFast(n: Int): String = withContext(Dispatchers.Default) {
