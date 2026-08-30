@@ -1,0 +1,58 @@
+name: Android ARM64 Native Build Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Java 21 Environment
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 3. Install x86_64 Emulation (qemu-user-static) for ARM64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
+
+      - name: 4. Download Android Command-Line Tools
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
+
+      - name: 5. Export Android SDK Environment Variables
+        run: |
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+
+      - name: 6. Update SDK Manager & Accept Licenses
+        run: |
+          yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
+          sdkmanager --sdk_root=$ANDROID_HOME --update
+
+      - name: 7. Install Android SDK 36 Components
+        run: |
+          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: 8. Execute Gradle Debug Build
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: 9. Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-arm64-debug
+          path: app/build/outputs/apk/debug/*.apk
